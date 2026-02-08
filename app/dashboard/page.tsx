@@ -58,6 +58,7 @@ function Slider({
   max,
   step,
   onChange,
+  accent,
 }: {
   label: string;
   value: number;
@@ -65,13 +66,17 @@ function Slider({
   max: number;
   step: number;
   onChange: (v: number) => void;
+  accent: string;
 }) {
   return (
     <div style={{ display: "grid", gap: 6 }}>
       <div style={{ display: "flex", justifyContent: "space-between" }}>
-        <span style={{ fontSize: 13, opacity: 0.82, color: "rgba(255,255,255,0.88)", fontWeight: 800 }}>{label}</span>
+        <span style={{ fontSize: 12, letterSpacing: 1.1, textTransform: "uppercase", color: "rgba(255,255,255,0.70)", fontWeight: 900 }}>
+          {label}
+        </span>
         <span style={{ fontWeight: 900, color: "rgba(255,255,255,0.92)" }}>{value.toFixed(2)}</span>
       </div>
+
       <input
         type="range"
         min={min}
@@ -79,8 +84,45 @@ function Slider({
         step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
+        className={`range-${accent}`}
         style={{ width: "100%" }}
       />
+
+      <style jsx>{`
+        input[type="range"] {
+          -webkit-appearance: none;
+          appearance: none;
+          height: 6px;
+          border-radius: 999px;
+          background: rgba(255, 255, 255, 0.18);
+          outline: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 18px;
+          height: 18px;
+          border-radius: 999px;
+          background: ${accent};
+          box-shadow: 0 10px 22px rgba(0, 0, 0, 0.35);
+          border: 1px solid rgba(255, 255, 255, 0.22);
+          cursor: pointer;
+        }
+        input[type="range"]::-moz-range-thumb {
+          width: 18px;
+          height: 18px;
+          border-radius: 999px;
+          background: ${accent};
+          box-shadow: 0 10px 22px rgba(0, 0, 0, 0.35);
+          border: 1px solid rgba(255, 255, 255, 0.22);
+          cursor: pointer;
+        }
+        input[type="range"]::-moz-range-track {
+          height: 6px;
+          border-radius: 999px;
+          background: rgba(255, 255, 255, 0.18);
+        }
+      `}</style>
     </div>
   );
 }
@@ -139,12 +181,7 @@ export default function DashboardPage() {
   }, [speaking]);
 
   useEffect(() => {
-    slidersRef.current = {
-      stability,
-      similarityBoost,
-      style,
-      speed,
-    };
+    slidersRef.current = { stability, similarityBoost, style, speed };
   }, [stability, similarityBoost, style, speed]);
 
   useEffect(() => {
@@ -153,13 +190,6 @@ export default function DashboardPage() {
       if (!data.session) router.push("/login");
     })();
   }, [router, supabase]);
-
-  function resetSliders() {
-    setStability(0.5);
-    setSimilarityBoost(0.75);
-    setStyle(0.2);
-    setSpeed(1.0);
-  }
 
   async function start() {
     setStatus("");
@@ -207,7 +237,6 @@ export default function DashboardPage() {
       if (!selectedVoiceIdRef.current && list[0]?.voice_id) {
         setSelectedVoiceId(list[0].voice_id || "");
         setSelectedVoiceName(list[0].name || "Selected voice");
-        resetSliders();
       }
 
       setStatus("Done");
@@ -414,6 +443,8 @@ export default function DashboardPage() {
     color: "rgba(255,255,255,0.92)",
   };
 
+  const sliderAccent = "rgba(255,64,140,0.90)";
+
   return (
     <div
       style={{
@@ -473,46 +504,6 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {selectedVoiceId && (
-              <div
-                style={{
-                  borderRadius: 18,
-                  padding: 14,
-                  border: "1px solid rgba(255,255,255,0.14)",
-                  background: "rgba(255,255,255,0.06)",
-                  display: "grid",
-                  gap: 12,
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                  <div style={{ ...labelStyle, marginBottom: 0 }}>Voice sliders</div>
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                    <button
-                      style={ghostButtonStyle}
-                      onClick={resetSliders}
-                      disabled={speaking}
-                    >
-                      Reset
-                    </button>
-                    <button
-                      style={ghostButtonStyle}
-                      onClick={() =>
-                        speak("Hello! This is a voice preview.", selectedVoiceId, stability, similarityBoost, style, speed)
-                      }
-                      disabled={speaking || !selectedVoiceId}
-                    >
-                      Preview with sliders
-                    </button>
-                  </div>
-                </div>
-
-                <Slider label="Stability" value={stability} min={0} max={1} step={0.01} onChange={setStability} />
-                <Slider label="Similarity boost" value={similarityBoost} min={0} max={1} step={0.01} onChange={setSimilarityBoost} />
-                <Slider label="Style" value={style} min={0} max={1} step={0.01} onChange={setStyle} />
-                <Slider label="Speed" value={speed} min={0.5} max={1.5} step={0.01} onChange={setSpeed} />
-              </div>
-            )}
-
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <div style={{ borderRadius: 16, padding: 14, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)" }}>
                 <div style={labelStyle}>Last</div>
@@ -542,6 +533,7 @@ export default function DashboardPage() {
             {voices.map((v, i) => {
               const isSelected = !!v.voice_id && v.voice_id === selectedVoiceId;
               const sub = shortVoiceTag(v);
+
               return (
                 <div
                   key={i}
@@ -549,14 +541,15 @@ export default function DashboardPage() {
                     borderRadius: 20,
                     padding: 16,
                     border: isSelected ? "2px solid rgba(255,255,255,0.55)" : "1px solid rgba(255,255,255,0.14)",
-                    background: "rgba(0,0,0,0.18)",
+                    background: isSelected ? "rgba(0,0,0,0.28)" : "rgba(0,0,0,0.18)",
                     cursor: v.voice_id ? "pointer" : "default",
+                    display: "grid",
+                    gap: 12,
                   }}
                   onClick={() => {
                     if (!v.voice_id) return;
                     setSelectedVoiceId(v.voice_id);
                     setSelectedVoiceName(v.name || "Selected voice");
-                    resetSliders();
                   }}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
@@ -574,34 +567,35 @@ export default function DashboardPage() {
                   </div>
 
                   {v.preview_url && (
-                    <div style={{ marginTop: 12 }}>
-                      <audio
-                        controls
-                        src={v.preview_url}
-                        style={{ width: "100%", filter: "invert(0.92) hue-rotate(190deg) saturate(1.2)" }}
-                        onPlay={() => {
-                          if (!v.voice_id) return;
-                          setSelectedVoiceId(v.voice_id);
-                          setSelectedVoiceName(v.name || "Selected voice");
-                        }}
-                      />
-                    </div>
+                    <audio
+                      controls
+                      src={v.preview_url}
+                      style={{ width: "100%", filter: "invert(0.92) hue-rotate(190deg) saturate(1.2)" }}
+                      onPlay={() => {
+                        if (!v.voice_id) return;
+                        setSelectedVoiceId(v.voice_id);
+                        setSelectedVoiceName(v.name || "Selected voice");
+                      }}
+                    />
                   )}
 
-                  {v.voice_id && (
-                    <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedVoiceId(v.voice_id!);
-                          setSelectedVoiceName(v.name || "Selected voice");
-                          speak("Hello! This is a voice preview.", v.voice_id!, stability, similarityBoost, style, speed);
-                        }}
-                        disabled={speaking}
-                        style={ghostButtonStyle}
-                      >
-                        Speak preview
-                      </button>
+                  {isSelected && (
+                    <div
+                      style={{
+                        borderRadius: 18,
+                        padding: 14,
+                        border: "1px solid rgba(255,255,255,0.14)",
+                        background: "rgba(255,255,255,0.06)",
+                        display: "grid",
+                        gap: 12,
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+
+                      <Slider label="Stability (Low = Expressive, High = Steady)" value={stability} min={0} max={1} step={0.01} onChange={setStability} accent={sliderAccent} />
+                      <Slider label="Similarity (Low = Varied, High = Consistent)" value={similarityBoost} min={0} max={1} step={0.01} onChange={setSimilarityBoost} accent={sliderAccent} />
+                      <Slider label="Style (Low = Neutral, High = Unique)" value={style} min={0} max={1} step={0.01} onChange={setStyle} accent={sliderAccent} />
+                      <Slider label="Speed (Low = Slower, High = Faster)" value={speed} min={0.5} max={1.5} step={0.01} onChange={setSpeed} accent={sliderAccent} />
                     </div>
                   )}
                 </div>
@@ -613,6 +607,7 @@ export default function DashboardPage() {
     </div>
   );
 }
+
 
 
 
