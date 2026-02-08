@@ -24,10 +24,7 @@ type GloveMsg =
 
 function toNiceWords(s?: string) {
   if (!s) return "";
-  return s
-    .replace(/[_-]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return s.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
 }
 
 function shortVoiceTag(v: SimilarVoice) {
@@ -50,6 +47,44 @@ function shortVoiceTag(v: SimilarVoice) {
   return first.length > 70 ? first.slice(0, 67) + "..." : first;
 }
 
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
+function Slider({
+  label,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div style={{ display: "grid", gap: 6 }}>
+      <div style={{ display: "flex", justifyContent: "space-between" }}>
+        <span style={{ fontSize: 13, opacity: 0.82, color: "rgba(255,255,255,0.88)", fontWeight: 800 }}>{label}</span>
+        <span style={{ fontWeight: 900, color: "rgba(255,255,255,0.92)" }}>{value.toFixed(2)}</span>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        style={{ width: "100%" }}
+      />
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const supabase = getSupabaseBrowserClient();
@@ -69,11 +104,23 @@ export default function DashboardPage() {
   const [word, setWord] = useState("");
   const [speaking, setSpeaking] = useState(false);
 
+  const [stability, setStability] = useState(0.5);
+  const [similarityBoost, setSimilarityBoost] = useState(0.75);
+  const [style, setStyle] = useState(0.2);
+  const [speed, setSpeed] = useState(1.0);
+
   const wsRef = useRef<WebSocket | null>(null);
   const wordRef = useRef("");
   const selectedVoiceIdRef = useRef("");
   const selectedVoiceNameRef = useRef("");
   const speakingRef = useRef(false);
+
+  const slidersRef = useRef({
+    stability: 0.5,
+    similarityBoost: 0.75,
+    style: 0.2,
+    speed: 1.0,
+  });
 
   useEffect(() => {
     wordRef.current = word;
@@ -92,11 +139,27 @@ export default function DashboardPage() {
   }, [speaking]);
 
   useEffect(() => {
+    slidersRef.current = {
+      stability,
+      similarityBoost,
+      style,
+      speed,
+    };
+  }, [stability, similarityBoost, style, speed]);
+
+  useEffect(() => {
     (async () => {
       const { data } = await supabase.auth.getSession();
       if (!data.session) router.push("/login");
     })();
   }, [router, supabase]);
+
+  function resetSliders() {
+    setStability(0.5);
+    setSimilarityBoost(0.75);
+    setStyle(0.2);
+    setSpeed(1.0);
+  }
 
   async function start() {
     setStatus("");
@@ -144,6 +207,7 @@ export default function DashboardPage() {
       if (!selectedVoiceIdRef.current && list[0]?.voice_id) {
         setSelectedVoiceId(list[0].voice_id || "");
         setSelectedVoiceName(list[0].name || "Selected voice");
+        resetSliders();
       }
 
       setStatus("Done");
@@ -160,8 +224,7 @@ export default function DashboardPage() {
   function connectGlove() {
     if (
       wsRef.current &&
-      (wsRef.current.readyState === WebSocket.OPEN ||
-        wsRef.current.readyState === WebSocket.CONNECTING)
+      (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)
     ) {
       return;
     }
@@ -229,7 +292,8 @@ export default function DashboardPage() {
           return;
         }
         setWord("");
-        await speak(w, vId);
+        const s = slidersRef.current;
+        await speak(w, vId, s.stability, s.similarityBoost, s.style, s.speed);
         return;
       }
 
@@ -246,13 +310,24 @@ export default function DashboardPage() {
     setGloveStatus("Disconnected");
   }
 
-  async function speak(text: string, voiceId: string) {
+  async function speak(text: string, voiceId: string, st: number, sb: number, sty: number, spd: number) {
     try {
       setSpeaking(true);
+
       const res = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, voiceId }),
+        body: JSON.stringify({
+          text,
+          voiceId,
+          voice_settings: {
+            stability: clamp(st, 0, 1),
+            similarity_boost: clamp(sb, 0, 1),
+            style: clamp(sty, 0, 1),
+            use_speaker_boost: true,
+          },
+          speed: clamp(spd, 0.5, 1.5),
+        }),
       });
 
       if (!res.ok) {
@@ -398,6 +473,46 @@ export default function DashboardPage() {
               </div>
             </div>
 
+            {selectedVoiceId && (
+              <div
+                style={{
+                  borderRadius: 18,
+                  padding: 14,
+                  border: "1px solid rgba(255,255,255,0.14)",
+                  background: "rgba(255,255,255,0.06)",
+                  display: "grid",
+                  gap: 12,
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  <div style={{ ...labelStyle, marginBottom: 0 }}>Voice sliders</div>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <button
+                      style={ghostButtonStyle}
+                      onClick={resetSliders}
+                      disabled={speaking}
+                    >
+                      Reset
+                    </button>
+                    <button
+                      style={ghostButtonStyle}
+                      onClick={() =>
+                        speak("Hello! This is a voice preview.", selectedVoiceId, stability, similarityBoost, style, speed)
+                      }
+                      disabled={speaking || !selectedVoiceId}
+                    >
+                      Preview with sliders
+                    </button>
+                  </div>
+                </div>
+
+                <Slider label="Stability" value={stability} min={0} max={1} step={0.01} onChange={setStability} />
+                <Slider label="Similarity boost" value={similarityBoost} min={0} max={1} step={0.01} onChange={setSimilarityBoost} />
+                <Slider label="Style" value={style} min={0} max={1} step={0.01} onChange={setStyle} />
+                <Slider label="Speed" value={speed} min={0.5} max={1.5} step={0.01} onChange={setSpeed} />
+              </div>
+            )}
+
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <div style={{ borderRadius: 16, padding: 14, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)" }}>
                 <div style={labelStyle}>Last</div>
@@ -441,6 +556,7 @@ export default function DashboardPage() {
                     if (!v.voice_id) return;
                     setSelectedVoiceId(v.voice_id);
                     setSelectedVoiceName(v.name || "Selected voice");
+                    resetSliders();
                   }}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
@@ -479,7 +595,7 @@ export default function DashboardPage() {
                           e.stopPropagation();
                           setSelectedVoiceId(v.voice_id!);
                           setSelectedVoiceName(v.name || "Selected voice");
-                          speak("Hello! This is a voice preview.", v.voice_id!);
+                          speak("Hello! This is a voice preview.", v.voice_id!, stability, similarityBoost, style, speed);
                         }}
                         disabled={speaking}
                         style={ghostButtonStyle}
